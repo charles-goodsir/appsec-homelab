@@ -1,0 +1,6 @@
+@AppSecLab.Api_HostAddress = http://localhost:5001
+
+GET {{AppSecLab.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

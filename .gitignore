@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+*.db
+
+# Backend
+backend/AppSecLab.Api/bin/
+backend/AppSecLab.Api/obj/
+backend/AppSecLab.Api/AppSecLab.Api.db
+# Frontend
+frontend/node_modules/
+frontend/dist/
+# Node
+node_modules/
+dist/
+
+# Editor
+.vscode/
+.DS_Store
