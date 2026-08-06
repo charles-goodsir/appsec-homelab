@@ -25,6 +25,8 @@ Write-ups for this project also live on my [portfolio's CyberDiary](https://char
 | 3 | Reflected XSS | A05:2025 - Injection | `ProductSearch.tsx` |
 | 4 | Plaintext password storage | A04:2025 - Cryptographic Failures | `SeedData.cs` / `User` model |
 
+> **Known false negative:** the Semgrep pipeline does not flag the SQL injection in `AuthController.cs`. Investigated and confirmed this is because the `csharp-sqli` rule doesn't treat `[FromBody]`-bound request objects as a tainted source, while `ProductsController.cs`'s `[FromQuery]` parameter is correctly recognised. The vulnerability itself is fully exploitable regardless - this is a gap in tool coverage, not in the code. Full investigation: [CyberDiary Entry 5](https://charles-goodsir.github.io/my-portfolio/#cyberdiary).
+
 Each is commented in code with `// VULNERABLE: <reason>`.
 
 ### Demonstrated exploits
