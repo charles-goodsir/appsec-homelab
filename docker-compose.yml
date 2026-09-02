@@ -1,0 +1,26 @@
+# AppSec Homelab - local deployment target for OWASP ZAP (DAST).
+# Only the frontend port is published; the backend is reachable only
+# on the internal compose network as "backend".
+services:
+  backend:
+    build:
+      context: ./backend/AppSecLab.Api
+    container_name: appseclab-backend
+    environment:
+      # Development keeps detailed error pages - useful for a deliberately
+      # vulnerable lab and for ZAP.
+      - ASPNETCORE_ENVIRONMENT=Development
+    restart: unless-stopped
+    # To hit the API / swagger directly from the host, uncomment:
+    # ports:
+    #   - "5001:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: appseclab-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

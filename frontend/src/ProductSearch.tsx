@@ -14,7 +14,7 @@ function ProductSearch() {
   const handleSearch = async () => {
     setSubmittedQuery(query)
     const response = await fetch(
-      `http://localhost:5001/api/products/search?query=${encodeURIComponent(query)}`,
+      `/api/products/search?query=${encodeURIComponent(query)}`,
     )
     const data = await response.json()
     setResults(data)

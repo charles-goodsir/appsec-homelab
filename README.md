@@ -15,6 +15,7 @@ Write-ups for this project also live on my [portfolio's CyberDiary](https://char
 - **Backend**: ASP.NET Core 8 Web API, EF Core + SQLite
 - **Frontend**: React + TypeScript, Vite
 - **Pipeline**: GitHub Actions (Semgrep SAST, gitleaks secret scanning — more planned)
+- **Deployment**: Docker Compose (nginx-fronted), for running OWASP ZAP against a self-hosted target
 
 ## Seeded vulnerabilities
 
@@ -44,12 +45,25 @@ Each is commented in code with `// VULNERABLE: <reason>`.
 
 ## Running locally
 
+### With Docker Compose (single entry point)
+
+```bash
+docker compose up -d --build
+```
+
+Serves the whole app on `http://localhost:8080`. nginx serves the built
+frontend and reverse-proxies `/api/*` to the backend container; only the
+frontend port is published. This is the layout OWASP ZAP points at.
+
+### Without Docker (dev)
+
 **Backend:**
 ```bash
 cd backend/AppSecLab.Api
 dotnet run
 ```
-Note the port printed in the console (e.g. `http://localhost:5001`).
+Note the port printed in the console (e.g. `http://localhost:5001`). If it
+differs, update the `/api` proxy target in `frontend/vite.config.ts`.
 
 **Frontend:**
 ```bash
@@ -57,7 +71,8 @@ cd frontend
 npm install
 npm run dev
 ```
-Opens at `http://localhost:5173`. Update the fetch URLs in `LoginForm.tsx`/`ProductSearch.tsx` if your backend port differs.
+Opens at `http://localhost:5173`. The frontend calls the API with relative
+`/api/...` URLs; Vite proxies those to the backend in dev.
 
 ## Roadmap
 
@@ -65,7 +80,8 @@ Opens at `http://localhost:5173`. Update the fetch URLs in `LoginForm.tsx`/`Prod
 - [ ] Semgrep SAST in GitHub Actions
 - [ ] gitleaks secret scanning in GitHub Actions
 - [ ] OWASP Dependency-Check / Snyk (SCA)
-- [ ] Deploy to a self-hosted target so OWASP ZAP (DAST) can run against it
+- [x] Containerise (Docker Compose) for deployment to a self-hosted target
+- [ ] Run OWASP ZAP (DAST) against the deployed target
 - [ ] Additional vulnerability categories: Broken Access Control, Authentication Failures
 
 ## Disclaimer
