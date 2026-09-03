@@ -40,8 +40,17 @@ Each is commented in code with `// VULNERABLE: <reason>`.
 **Reflected XSS**
 - Search query: `<img src=x onerror=alert(1)>`
 - Result: JavaScript executes in the browser, popping an alert
+- Note: the CSP added in `frontend/nginx.conf` (`script-src 'self'`) now blocks
+  this inline-handler payload — the injection bug in `ProductSearch.tsx` is
+  unchanged, CSP is defence-in-depth on top of it.
 
 *(Screenshots to come)*
+
+### Hardening applied
+
+Response headers set in `frontend/nginx.conf` (remediation for the ZAP baseline
+scan): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a basic
+`Content-Security-Policy`, and `server_tokens off` to hide the nginx version.
 
 ## Running locally
 
