@@ -14,13 +14,17 @@ public class ProductsController : ControllerBase
   [HttpGet("search")]
   public IActionResult Search([FromQuery] string query)
   {
-    // VULNERABLE: raw string concatenation into SQL (A05:2025 - Injection)
-        var sql = $"SELECT Id, Name, Description FROM Products WHERE Name LIKE '%{query}%'";
+    // FIXED: parameterized query — wildcards applied to the parameter value, not the SQL text
+        var sql = "SELECT Id, Name, Description FROM Products WHERE Name LIKE @Query";
 
         using var connection = _db.Database.GetDbConnection();
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = sql;
+        var  queryParam = command.CreateParameter();
+        queryParam.ParameterName = "@Query";
+        queryParam.Value = $"%{query}%";         
+        command.Parameters.Add(queryParam);
         using var reader = command.ExecuteReader();
 
         var results = new List<object>();
