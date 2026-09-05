@@ -27,12 +27,7 @@ function ProductSearch() {
       <button onClick={handleSearch}>Search</button>
 
       {/* VULNERABLE: reflected XSS (A05:2025 - Injection) - renders raw user input as HTML */}
-      <p
-        dangerouslySetInnerHTML={{
-          __html: `You searched for: ${submittedQuery}`,
-        }}
-      />
-
+      <p>'You searched for: {submittedQuery}</p>
       <ul>
         {results.map((product) => (
           <li key={product.id}>
