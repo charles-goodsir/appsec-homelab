@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # 03:00 UTC nightly — advisory DBs (NVD, GitHub Advisory, npm) update
+    # daily, so a dependency that was clean yesterday can be vulnerable
+    # today with zero code changes. This catches that without a push.
+    - cron: "0 3 * * *"
 
 # Default: read-only. Jobs elevate individually only where they need to.
 permissions:
@@ -273,3 +278,44 @@ jobs:
     steps:
       - name: Deploy to production
         run: echo "::notice::Wire up the real production deploy once a prod target exists."
+
+  # ---------------------------------------------------------------------
+  # Summary — one glance at every gate's outcome, posted to the run's
+  # summary page. `if: always()` is required twice over: on the job
+  # itself, so it still runs even if an earlier job failed, and its
+  # `needs` lists every job whose result we want to report on.
+  # ---------------------------------------------------------------------
+  summary:
+    name: Results Summary
+    if: always()
+    needs:
+      [
+        secrets,
+        sast,
+        build,
+        dependency-scan,
+        container-scan,
+        test,
+        deploy-staging,
+        deploy-prod,
+      ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Write summary table
+        run: |
+          {
+            echo "## Security Scan Results"
+            echo ""
+            echo "| Gate | Result |"
+            echo "|---|---|"
+            echo "| Secret scan (gitleaks) | ${{ needs.secrets.result }} |"
+            echo "| SAST (Semgrep) | ${{ needs.sast.result }} |"
+            echo "| Build | ${{ needs.build.result }} |"
+            echo "| Dependency scan | ${{ needs.dependency-scan.result }} |"
+            echo "| Container scan (Trivy) | ${{ needs.container-scan.result }} |"
+            echo "| Test | ${{ needs.test.result }} |"
+            echo "| Deploy (staging) + DAST | ${{ needs.deploy-staging.result }} |"
+            echo "| Deploy (production) | ${{ needs.deploy-prod.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

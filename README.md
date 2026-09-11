@@ -85,14 +85,37 @@ npm run dev
 Opens at `http://localhost:5173`. The frontend calls the API with relative
 `/api/...` URLs; Vite proxies those to the backend in dev.
 
-## Roadmap
+## Pipeline
+
+Every push and PR to `main` runs the full gate; `main` pushes additionally
+deploy to staging (DAST included) and pause for manual approval before
+production. A nightly cron run keeps dependency findings fresh even with
+no code changes.
+
+```mermaid
+flowchart LR
+    subgraph Gates ["Runs on every push / PR / nightly"]
+        direction LR
+        secrets[Secret scan\ngitleaks]
+        sast[SAST\nSemgrep]
+        build[Build]
+        deps[Dependency scan\nNuGet + npm]
+        build --> test[Test]
+        build --> containers[Container scan\nTrivy]
+    end
+
+    Gates --> staging["Deploy: staging\n+ ZAP DAST baseline"]
+    staging -- required reviewer --> prod["Deploy: production"]
+```
 
 - [x] Vulnerable app scaffolded (SQLi, XSS, plaintext credentials)
-- [ ] Semgrep SAST in GitHub Actions
-- [ ] gitleaks secret scanning in GitHub Actions
-- [ ] OWASP Dependency-Check / Snyk (SCA)
+- [x] Semgrep SAST in GitHub Actions, findings in the Security tab
+- [x] gitleaks secret scanning in GitHub Actions
+- [x] SCA — `dotnet list package --vulnerable` + `npm audit`, Dependabot enabled
+- [x] Trivy container image scanning
 - [x] Containerise (Docker Compose) for deployment to a self-hosted target
-- [ ] Run OWASP ZAP (DAST) against the deployed target
+- [x] Run OWASP ZAP (DAST) against the deployed target, baseline scan
+- [ ] ZAP active scan + AJAX spider (baseline-only currently misses planted SQLi/XSS)
 - [ ] Additional vulnerability categories: Broken Access Control, Authentication Failures
 
 ## Disclaimer
