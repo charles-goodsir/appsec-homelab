@@ -157,3 +157,119 @@ jobs:
     steps:
       - name: No tests yet
         run: echo "::notice::No automated tests in this repo yet — placeholder job."
+
+  # ---------------------------------------------------------------------
+  # Container scan — builds both images and scans the filesystem inside
+  # each (OS packages + app deps in the final layer, not just source).
+  # Catches things SAST/dependency-scan never see, e.g. a vulnerable
+  # base-image package. Non-blocking (severity table posted, no fail)
+  # until you've triaged a baseline run and decided what "clean" means
+  # for this repo — flip `exit-code` to `1` once you have.
+  # ---------------------------------------------------------------------
+  container-scan:
+    name: Container Scan (Trivy)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build backend image
+        run: docker build -t appseclab-backend:scan backend/AppSecLab.Api
+
+      - name: Build frontend image
+        run: docker build -t appseclab-frontend:scan frontend
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: appseclab-backend:scan
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "0" # start non-blocking; tighten to "1" after triage
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: appseclab-frontend:scan
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+  # ---------------------------------------------------------------------
+  # Deploy — staging then prod, main branch only. Prod is a separate job
+  # tied to the `production` GitHub Environment, which you configure with
+  # a required reviewer in Settings → Environments. That pause is the
+  # deployment gate: the run stops here until a human approves it.
+  # ---------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy (staging)
+    needs: [secrets, sast, build, dependency-scan, container-scan, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+    steps:
+      - name: Deploy to mini PC via SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ~/appsec-homelab
+            git pull
+            docker compose up -d --build
+
+      # DAST target is LAN-only (never internet-exposed, by design — see
+      # DEPLOY.md), so a GitHub-hosted runner can't reach it directly.
+      # Cheapest fix without a self-hosted runner: run ZAP *on* the mini
+      # PC via the same SSH connection, against the app's own LAN address.
+      - name: DAST — ZAP baseline via SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            mkdir -p ~/appsec-homelab/dast
+            docker run --rm -v ~/appsec-homelab/dast:/zap/wrk/:rw \
+              ghcr.io/zaproxy/zaproxy:stable \
+              zap-baseline.py -t http://${{ secrets.SSH_HOST }}:8080 \
+              -r zap-baseline-report.html || true
+            # `|| true`: baseline exits non-zero on WARN-level findings too,
+            # which would fail the job on noise. Findings still land in the
+            # HTML report either way — read it, don't just watch the exit code.
+
+      - name: Pull ZAP report back from the mini PC
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "appsec-homelab/dast/zap-baseline-report.html"
+          target: "."
+          strip_components: 2
+
+      - name: Upload ZAP report as workflow artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: zap-baseline-report
+          path: zap-baseline-report.html
+          retention-days: 14
+
+  deploy-prod:
+    name: Deploy (production)
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production # protection rule (required reviewer) set in repo Settings
+    permissions:
+      contents: read
+    steps:
+      - name: Deploy to production
+        run: echo "::notice::Wire up the real production deploy once a prod target exists."

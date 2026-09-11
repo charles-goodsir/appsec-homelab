@@ -3,7 +3,7 @@
 Goal: run the vulnerable app on the homelab mini PC so OWASP ZAP can scan it
 over the LAN. The app is **only** ever exposed on the home network.
 
-Mini PC: Linux Mint, user `owner`, `192.168.88.13` (Wi-Fi).
+Mini PC: Linux Mint, user `owner`, `192.168.88.18` (Wi-Fi).
 
 ## 1. Free up RAM — text-only boot
 
@@ -52,14 +52,14 @@ sudo ufw status
 
 ## 5. Verify from the Mac
 
-Browser: `http://192.168.88.13:8080`
+Browser: `http://192.168.88.18:8080`
 
 - SQLi login bypass: username `administrator'--`, any password
 - Reflected XSS: search `<img src=x onerror=alert(1)>`
 
 ## 6. Point ZAP at it
 
-Target: `http://192.168.88.13:8080`
+Target: `http://192.168.88.18:8080`
 
 ## Managing the deployment
 
