@@ -1,5 +1,7 @@
 # AppSec Homelab
 
+[![Security Scan](https://github.com/charles-goodsir/appsec-homelab/actions/workflows/security.yml/badge.svg)](https://github.com/charles-goodsir/appsec-homelab/actions/workflows/security.yml)
+
 A deliberately vulnerable full-stack app, built to practice hands-on Application Security — writing, finding, and eventually catching real vulnerabilities in a CI/CD pipeline.
 
 This is a personal training project. It never runs anywhere but locally, and every vulnerability in it is intentional and commented in the code.
