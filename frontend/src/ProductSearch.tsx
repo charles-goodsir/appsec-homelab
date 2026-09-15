@@ -26,8 +26,9 @@ function ProductSearch() {
       <input value={query} onChange={(e) => setQuery(e.target.value)} />
       <button onClick={handleSearch}>Search</button>
 
-      {/* VULNERABLE: reflected XSS (A05:2025 - Injection) - renders raw user input as HTML */}
-      <p>'You searched for: {submittedQuery}</p>
+      {/* FIXED: plain JSX text interpolation - React escapes this by default,
+          so injected markup renders as literal text instead of executing */}
+      <p>You searched for: {submittedQuery}</p>
       <ul>
         {results.map((product) => (
           <li key={product.id}>

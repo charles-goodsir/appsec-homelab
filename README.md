@@ -2,13 +2,13 @@
 
 [![Security Scan](https://github.com/charles-goodsir/appsec-homelab/actions/workflows/security.yml/badge.svg)](https://github.com/charles-goodsir/appsec-homelab/actions/workflows/security.yml)
 
-A deliberately vulnerable full-stack app, built to practice hands-on Application Security — writing, finding, and eventually catching real vulnerabilities in a CI/CD pipeline.
+A deliberately vulnerable full-stack app wrapped in a real CI/CD security pipeline — built to practice DevSecOps end to end: writing vulnerabilities, catching them with automated tooling, and fixing them for real.
 
 This is a personal training project. It never runs anywhere but locally, and every vulnerability in it is intentional and commented in the code.
 
 ## Why this exists
 
-I'm a software engineer (.NET/C#, TypeScript/React) pivoting into Application Security. Rather than only studying vulnerabilities in isolation (PortSwigger labs, OWASP docs), this project puts them in code I wrote myself, in a stack I actually work in day-to-day — so I can practice finding, exploiting, fixing, and eventually automating detection of the same bug classes I'll see in real codebases.
+I'm a software engineer (.NET/C#, TypeScript/React) building toward DevOps and DevSecOps, with application security as the specialty inside that. Rather than only studying vulnerabilities in isolation (PortSwigger labs, OWASP docs) or scanners in isolation, this project puts both in one place: code I wrote myself, in a stack I actually work in day-to-day, gated by a pipeline I built myself — so I can practice finding, exploiting, fixing, and catching the same bug classes I'll see in real codebases, the same way a real deployment gate would.
 
 Write-ups for this project also live on my [portfolio's CyberDiary](https://charles-goodsir.github.io/my-portfolio/).
 
@@ -21,30 +21,49 @@ Write-ups for this project also live on my [portfolio's CyberDiary](https://char
 
 ## Seeded vulnerabilities
 
-| # | Vulnerability | OWASP 2025 Category | Location |
-|---|---|---|---|
-| 1 | SQL injection (login bypass) | A05:2025 - Injection | `AuthController.cs` — `Login()` |
-| 2 | SQL injection (search) | A05:2025 - Injection | `ProductsController.cs` — `Search()` |
-| 3 | Reflected XSS | A05:2025 - Injection | `ProductSearch.tsx` |
-| 4 | Plaintext password storage | A04:2025 - Cryptographic Failures | `SeedData.cs` / `User` model |
+| # | Vulnerability | OWASP 2025 Category | Location | Status |
+|---|---|---|---|---|
+| 1 | SQL injection (login bypass) | A05:2025 - Injection | `AuthController.cs` — `Login()` | Fixed |
+| 2 | SQL injection (search) | A05:2025 - Injection | `ProductsController.cs` — `Search()` | Fixed |
+| 3 | Reflected XSS | A05:2025 - Injection | `ProductSearch.tsx` | Fixed |
+| 4 | Plaintext password storage | A04:2025 - Cryptographic Failures | `SeedData.cs` / `User` model | Open |
 
-> **Known false negative:** the Semgrep pipeline does not flag the SQL injection in `AuthController.cs`. Investigated and confirmed this is because the `csharp-sqli` rule doesn't treat `[FromBody]`-bound request objects as a tainted source, while `ProductsController.cs`'s `[FromQuery]` parameter is correctly recognised. The vulnerability itself is fully exploitable regardless - this is a gap in tool coverage, not in the code. Full investigation: [CyberDiary Entry 5](https://charles-goodsir.github.io/my-portfolio/#cyberdiary).
+Each is commented in code with `// VULNERABLE: <reason>` (or `// FIXED: <reason>` once remediated).
 
-Each is commented in code with `// VULNERABLE: <reason>`.
+### Vulnerability walkthroughs (exploit → fix → re-test)
 
-### Demonstrated exploits
+**SQL injection login bypass** — `AuthController.cs`
+- Before: raw string interpolation built the query directly from request fields
+  (`$"... WHERE Username = '{request.Username}' AND ..."`).
+- Exploit: username `administrator'--`, any password — comments out the password
+  check, logs in as administrator without knowing the real password.
+- Fix: switched to a parameterized query (`@Name`/`@Password` as `DbParameter`s),
+  so the injected `'--` is bound as literal string data instead of SQL syntax.
+- Re-tested: the same payload now returns `401 Unauthorized`.
 
-**SQL injection login bypass**
-- Username: `administrator'--`
-- Password: (anything)
-- Result: logs in as administrator without knowing the real password
+> **Semgrep false negative (historical):** while this bug was still live, the
+> Semgrep pipeline did not flag it. Investigated and confirmed this was because
+> the `csharp-sqli` rule doesn't treat `[FromBody]`-bound request objects as a
+> tainted source, while `ProductsController.cs`'s `[FromQuery]` parameter was
+> correctly recognised. Real gap in tool coverage, not in the code — worth
+> knowing that a clean Semgrep run doesn't mean a clean codebase. Full
+> investigation: [CyberDiary Entry 5](https://charles-goodsir.github.io/my-portfolio/#cyberdiary).
 
-**Reflected XSS**
-- Search query: `<img src=x onerror=alert(1)>`
-- Result: JavaScript executes in the browser, popping an alert
-- Note: the CSP added in `frontend/nginx.conf` (`script-src 'self'`) now blocks
-  this inline-handler payload — the injection bug in `ProductSearch.tsx` is
-  unchanged, CSP is defence-in-depth on top of it.
+**SQL injection (search)** — `ProductsController.cs`
+- Before: same raw-interpolation pattern in the `Search()` query.
+- Fix: parameterized query with the `%wildcard%` applied to the parameter
+  value, not concatenated into the SQL text.
+
+**Reflected XSS** — `ProductSearch.tsx`
+- Before: `dangerouslySetInnerHTML` rendered the search query as raw HTML.
+- Exploit: search query `<img src=x onerror=alert('XSS')>` — the `<img>` tag
+  rendered for real (broken-image icon in the DOM) and its `onerror` handler
+  executed, firing the alert.
+- Fix: reverted to plain JSX text interpolation (`{submittedQuery}`), which
+  React escapes by default — the same payload now renders as inert literal
+  text instead of executing.
+- Re-tested: confirmed in-browser, no script execution, payload displayed
+  as plain text.
 
 *(Screenshots to come)*
 
