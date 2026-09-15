@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using AppSecLab.Api.Data;
+using Microsoft.AspNetCore.Identity;
+using AppSecLab.Api.Models;
+
 
 namespace AppSecLab.Api.Controllers;
 
@@ -17,9 +20,8 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public IActionResult Login([FromBody] LoginRequest request)
     {
-        // VULNERABLE: raw string concatenation into SQL (A05:2025 - Injection)
-        // Mirrors the PortSwigger login-bypass lab pattern - never do this in real code.
-        var sql = "SELECT Id, Username FROM Users WHERE Username = @Name AND Password = @Password";
+        // FIXED: parameterized query + PasswordHasher<User> for verification (no plaintext comparison)
+        var sql = "SELECT Id, Username, PasswordHash FROM Users WHERE Username = @Name";
         
 
         using var connection = _db.Database.GetDbConnection();
@@ -30,18 +32,21 @@ public class AuthController : ControllerBase
         nameParam.ParameterName = "@Name";
         nameParam.Value = request.Username;
         command.Parameters.Add(nameParam);
-        var passwordParam = command.CreateParameter();
-        passwordParam.ParameterName = "@Password";
-        passwordParam.Value = request.Password;
-        command.Parameters.Add(passwordParam);
+        
 
         using var reader = command.ExecuteReader();
 
         if (reader.Read())
         {
-            return Ok(new { username = reader["Username"].ToString(), message = "Login successful" });
+            var storedHash = reader["PasswordHash"].ToString();
+            var hasher = new PasswordHasher<User>();
+            var result = hasher.VerifyHashedPassword(new User(), storedHash, request.Password);
+            if (result == PasswordVerificationResult.Success)
+            {
+                return Ok(new { username = reader["Username"].ToString(), message = "Login successful" });
+            }
         }
 
         return Unauthorized(new { message = "Invalid credentials" });
+        }
     }
-}

@@ -1,8 +1,11 @@
 
 using AppSecLab.Api.Models;
 using System.Linq;
+using Microsoft.AspNetCore.Identity;
 
 namespace AppSecLab.Api.Data;
+
+
 
 public static class SeedData
 {
@@ -10,9 +13,14 @@ public static class SeedData
     {
         if (!db.Users.Any())
         {
+            var hasher = new PasswordHasher<User>();
+            var admin = new User { Username = "administrator" };
+            admin.PasswordHash = hasher.HashPassword(admin, "admin123");
+            var wiener = new User { Username = "wiener" };
+            wiener.PasswordHash = hasher.HashPassword(wiener, "peter");
             db.Users.AddRange(
-                new User { Username = "administrator", Password = "admin123" },
-                new User { Username = "wiener", Password = "peter" }
+                admin,
+                wiener
             );
 
             db.Products.AddRange(

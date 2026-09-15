@@ -26,7 +26,7 @@ Write-ups for this project also live on my [portfolio's CyberDiary](https://char
 | 1 | SQL injection (login bypass) | A05:2025 - Injection | `AuthController.cs` — `Login()` | Fixed |
 | 2 | SQL injection (search) | A05:2025 - Injection | `ProductsController.cs` — `Search()` | Fixed |
 | 3 | Reflected XSS | A05:2025 - Injection | `ProductSearch.tsx` | Fixed |
-| 4 | Plaintext password storage | A04:2025 - Cryptographic Failures | `SeedData.cs` / `User` model | Open |
+| 4 | Plaintext password storage | A04:2025 - Cryptographic Failures | `SeedData.cs` / `User` model | Fixed |
 
 Each is commented in code with `// VULNERABLE: <reason>` (or `// FIXED: <reason>` once remediated).
 
@@ -64,6 +64,21 @@ Each is commented in code with `// VULNERABLE: <reason>` (or `// FIXED: <reason>
   text instead of executing.
 - Re-tested: confirmed in-browser, no script execution, payload displayed
   as plain text.
+
+**Plaintext password storage** — `SeedData.cs` / `User` model
+- Before: the `User` model stored `Password` as a raw string, seeded and
+  compared as plaintext (`Password = @Password` in the login query). A leaked
+  database would expose every credential as-is.
+- Fix: renamed the column to `PasswordHash` and switched to
+  `Microsoft.AspNetCore.Identity`'s `PasswordHasher<User>` — a salted PBKDF2
+  hash generated at seed time (`HashPassword`), verified at login time
+  (`VerifyHashedPassword`) instead of a raw string comparison. The login query
+  now looks up by username only; the password check happens in C#, not SQL.
+- Re-tested: correct credentials still log in, a wrong password returns
+  `401`, and the SQL injection payload from bug #1 still fails — confirming
+  the parameterized query wasn't affected by the password-check rewrite.
+- `sqlite3 appseclab.db "SELECT Username, PasswordHash FROM Users;"` shows
+  hashed blobs, not plaintext.
 
 *(Screenshots to come)*
 
