@@ -11,7 +11,7 @@ This is a personal training project. It never runs anywhere but locally, and eve
 I'm a software engineer (.NET/C#, TypeScript/React) building toward DevOps and DevSecOps, with application security as the specialty inside that. Rather than only studying vulnerabilities in isolation (PortSwigger labs, OWASP docs) or scanners in isolation, this project puts both in one place: code I wrote myself, in a stack I actually work in day-to-day, gated by a pipeline I built myself — so I can practice finding, exploiting, fixing, and catching the same bug classes I'll see in real codebases, the same way a real deployment gate would.
 
 Write-ups for this project also live on my [portfolio's CyberDiary](https://charles-goodsir.github.io/my-portfolio/).
-
+[Risk Assessment](https://github.com/charles-goodsir/appsec-homelab/blob/main/homelab-risk-assessment.md)
 ## Stack
 
 - **Backend**: ASP.NET Core 8 Web API, EF Core + SQLite
