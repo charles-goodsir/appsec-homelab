@@ -22,11 +22,6 @@ pool:
 variables:
   - group: appsec-homelab-secrets # create in Library: SEMGREP_APP_TOKEN, SSH_HOST, SSH_USER
 
-resources:
-  containers:
-    - container: semgrep
-      image: semgrep/semgrep
-
 stages:
   # -------------------------------------------------------------------
   # Secret scanning — catches committed credentials, API keys, tokens.
@@ -50,19 +45,18 @@ stages:
     displayName: SAST (Semgrep)
     jobs:
       - job: semgrep_job
-        container: semgrep
         steps:
           - checkout: self
           - script: |
-              semgrep ci \
+              docker run --rm -v $(Build.SourcesDirectory):/src -w /src \
+                -e SEMGREP_APP_TOKEN=$(SEMGREP_APP_TOKEN) \
+                semgrep/semgrep semgrep ci \
                 --config=p/owasp-top-ten \
                 --config=p/csharp \
                 --config=p/typescript \
-                --sarif --output=$(Build.ArtifactStagingDirectory)/semgrep.sarif
+                --sarif --output=semgrep.sarif
             displayName: Run Semgrep
-            env:
-              SEMGREP_APP_TOKEN: $(SEMGREP_APP_TOKEN)
-          - publish: $(Build.ArtifactStagingDirectory)/semgrep.sarif
+          - publish: $(Build.SourcesDirectory)/semgrep.sarif
             artifact: semgrep-sarif
             condition: always()
 
