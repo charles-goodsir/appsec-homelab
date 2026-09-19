@@ -22,6 +22,11 @@ pool:
 variables:
   - group: appsec-homelab-secrets # create in Library: SEMGREP_APP_TOKEN, SSH_HOST, SSH_USER
 
+resources:
+  containers:
+    - container: semgrep
+      image: semgrep/semgrep
+
 stages:
   # -------------------------------------------------------------------
   # Secret scanning — catches committed credentials, API keys, tokens.
@@ -44,8 +49,8 @@ stages:
   - stage: SAST
     displayName: SAST (Semgrep)
     jobs:
-      - job: semgrep
-        container: semgrep/semgrep
+      - job: semgrep_job
+        container: semgrep
         steps:
           - checkout: self
           - script: |
