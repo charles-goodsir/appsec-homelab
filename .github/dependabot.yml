@@ -5,12 +5,16 @@ updates:
     directory: "/backend/AppSecLab.Api"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
 
   # Frontend npm packages
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
 
   # GitHub Actions — keeps the SHA-pinned actions in security.yml current.
   # Dependabot opens a PR bumping the SHA (with the tag comment updated
@@ -19,3 +23,5 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7

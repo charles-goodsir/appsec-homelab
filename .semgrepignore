@@ -1,0 +1,3 @@
+# Generated evidence artifacts, not source code — Semgrep flags plaintext
+# http:// links inside these reports' own content (e.g. OWASP reference URLs).
+dast/

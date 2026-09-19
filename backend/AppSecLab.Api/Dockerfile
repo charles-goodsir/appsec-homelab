@@ -17,4 +17,5 @@ COPY --from=build /app ./
 
 # aspnet:8.0 images already default to ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
+USER $APP_UID
 ENTRYPOINT ["dotnet", "AppSecLab.Api.dll"]
