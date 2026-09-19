@@ -148,10 +148,12 @@ stages:
             displayName: Scan frontend image
 
   # -------------------------------------------------------------------
-  # Deploy — staging then prod, main branch only, via SSH to the mini PC.
-  # deployment jobs target an Environment; add a required-approval check
-  # on the "production" Environment in Pipelines > Environments to
-  # reproduce GitHub's manual-reviewer gate.
+  # Deploy — staging then prod, main branch only. Both deployment jobs
+  # run on the self-hosted mini-pc-pool agent, i.e. directly on the
+  # target machine — no SSH needed, since the pipeline job *is* running
+  # on the mini PC. deployment jobs target an Environment; add a
+  # required-approval check on the "production" Environment in
+  # Pipelines > Environments to reproduce GitHub's manual-reviewer gate.
   # -------------------------------------------------------------------
   - stage: DeployStaging
     displayName: Deploy (staging)
@@ -160,35 +162,21 @@ stages:
     jobs:
       - deployment: deploy_staging
         environment: staging
+        pool: mini-pc-pool
         strategy:
           runOnce:
             deploy:
               steps:
                 - checkout: self
-                - task: DownloadSecureFile@1
-                  name: sshKey
-                  inputs:
-                    secureFile: mini-pc-deploy-key # upload in Library > Secure files
+                - script: docker compose up -d --build
+                  displayName: Deploy (docker compose, local)
                 - script: |
-                    chmod 600 $(sshKey.secureFilePath)
-                    ssh -i $(sshKey.secureFilePath) -o StrictHostKeyChecking=no \
-                      $(SSH_USER)@$(SSH_HOST) "cd ~/appsec-homelab && git pull && docker compose up -d --build"
-                  displayName: Deploy to mini PC via SSH
-                - script: |
-                    chmod 600 $(sshKey.secureFilePath)
-                    ssh -i $(sshKey.secureFilePath) -o StrictHostKeyChecking=no \
-                      $(SSH_USER)@$(SSH_HOST) "mkdir -p ~/appsec-homelab/dast && \
-                      docker run --rm -v ~/appsec-homelab/dast:/zap/wrk/:rw \
+                    mkdir -p dast
+                    docker run --rm -v $(Build.SourcesDirectory)/dast:/zap/wrk/:rw \
                       ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-                      -t http://$(SSH_HOST):8080 -r zap-baseline-report.html || true"
-                  displayName: "DAST — ZAP baseline via SSH"
-                - script: |
-                    chmod 600 $(sshKey.secureFilePath)
-                    scp -i $(sshKey.secureFilePath) -o StrictHostKeyChecking=no \
-                      $(SSH_USER)@$(SSH_HOST):~/appsec-homelab/dast/zap-baseline-report.html \
-                      $(Build.ArtifactStagingDirectory)/
-                  displayName: Pull ZAP report back from the mini PC
-                - publish: $(Build.ArtifactStagingDirectory)/zap-baseline-report.html
+                      -t http://localhost:8080 -r zap-baseline-report.html || true
+                  displayName: "DAST — ZAP baseline"
+                - publish: $(Build.SourcesDirectory)/dast/zap-baseline-report.html
                   artifact: zap-baseline-report
                   condition: always()
 
@@ -199,6 +187,7 @@ stages:
     jobs:
       - deployment: deploy_prod
         environment: production # add a required-approval check here in Pipelines > Environments
+        pool: mini-pc-pool
         strategy:
           runOnce:
             deploy:
