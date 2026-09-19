@@ -8,14 +8,6 @@ pr:
     include:
       - main
 
-schedules:
-  - cron: "0 3 * * *"
-    displayName: Nightly dependency scan
-    branches:
-      include:
-        - main
-    always: true
-
 pool:
   vmImage: ubuntu-latest
 
