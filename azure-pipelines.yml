@@ -172,7 +172,7 @@ stages:
                   displayName: Deploy (docker compose, local)
                 - script: |
                     mkdir -p dast
-                    docker run --rm -v $(Build.SourcesDirectory)/dast:/zap/wrk/:rw \
+                    docker run --rm --network host -v $(Build.SourcesDirectory)/dast:/zap/wrk/:rw \
                       ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
                       -t http://localhost:8080 -r zap-baseline-report.html || true
                   displayName: "DAST — ZAP baseline"

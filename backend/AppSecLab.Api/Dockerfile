@@ -14,6 +14,8 @@ RUN dotnet publish AppSecLab.Api.csproj -c Release -o /app --no-restore
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 COPY --from=build /app ./
+# non-root USER below needs write access to create/open appseclab.db here
+RUN chown -R $APP_UID /app
 
 # aspnet:8.0 images already default to ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
