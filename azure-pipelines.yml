@@ -1,19 +1,217 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Nightly dependency scan
+    branches:
+      include:
+        - main
+    always: true
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+variables:
+  - group: appsec-homelab-secrets # create in Library: SEMGREP_APP_TOKEN, SSH_HOST, SSH_USER
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+stages:
+  # -------------------------------------------------------------------
+  # Secret scanning — catches committed credentials, API keys, tokens.
+  # -------------------------------------------------------------------
+  - stage: Secrets
+    displayName: Secret Scan (gitleaks)
+    jobs:
+      - job: gitleaks
+        steps:
+          - checkout: self
+            fetchDepth: 0 # gitleaks needs full history, not just the latest commit
+          - script: |
+              docker run --rm -v $(pwd):/repo zricethezav/gitleaks:latest \
+                detect --source="/repo" --no-git -v
+            displayName: Run gitleaks
+
+  # -------------------------------------------------------------------
+  # SAST — static analysis of source for OWASP-class vulns.
+  # -------------------------------------------------------------------
+  - stage: SAST
+    displayName: SAST (Semgrep)
+    jobs:
+      - job: semgrep
+        container: semgrep/semgrep
+        steps:
+          - checkout: self
+          - script: |
+              semgrep ci \
+                --config=p/owasp-top-ten \
+                --config=p/csharp \
+                --config=p/typescript \
+                --sarif --output=$(Build.ArtifactStagingDirectory)/semgrep.sarif
+            displayName: Run Semgrep
+            env:
+              SEMGREP_APP_TOKEN: $(SEMGREP_APP_TOKEN)
+          - publish: $(Build.ArtifactStagingDirectory)/semgrep.sarif
+            artifact: semgrep-sarif
+            condition: always()
+
+  # -------------------------------------------------------------------
+  # Build — compiles backend and frontend.
+  # -------------------------------------------------------------------
+  - stage: Build
+    displayName: Build
+    dependsOn: []
+    jobs:
+      - job: build
+        steps:
+          - checkout: self
+          - task: UseDotNet@2
+            inputs:
+              version: "8.0.x"
+          - script: |
+              dotnet restore
+              dotnet build --no-restore --configuration Release
+            workingDirectory: backend/AppSecLab.Api
+            displayName: Restore & build backend
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+          - script: |
+              npm ci
+              npm run build
+            workingDirectory: frontend
+            displayName: Install & build frontend
+
+  # -------------------------------------------------------------------
+  # Dependency scan — known CVEs in NuGet and npm packages.
+  # -------------------------------------------------------------------
+  - stage: DependencyScan
+    displayName: Dependency Scan
+    dependsOn: []
+    jobs:
+      - job: dependency_scan
+        steps:
+          - checkout: self
+          - task: UseDotNet@2
+            inputs:
+              version: "8.0.x"
+          - script: |
+              dotnet restore
+              dotnet list package --vulnerable --include-transitive | tee nuget-vuln.txt
+              if grep -qi "has the following vulnerable packages" nuget-vuln.txt; then
+                echo "##vso[task.logissue type=error]Vulnerable NuGet packages found"
+                exit 1
+              fi
+            workingDirectory: backend/AppSecLab.Api
+            displayName: Check for vulnerable NuGet packages
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+          - script: |
+              npm ci
+              npm audit --audit-level=high
+            workingDirectory: frontend
+            displayName: Check for vulnerable npm packages
+
+  # -------------------------------------------------------------------
+  # Test — no test project exists yet; placeholder job.
+  # -------------------------------------------------------------------
+  - stage: Test
+    displayName: Test
+    dependsOn: Build
+    jobs:
+      - job: test
+        steps:
+          - script: echo "##vso[task.logissue type=warning]No automated tests in this repo yet — placeholder job."
+            displayName: No tests yet
+
+  # -------------------------------------------------------------------
+  # Container scan — builds both images, scans filesystem inside each.
+  # Non-blocking until a baseline run is triaged.
+  # -------------------------------------------------------------------
+  - stage: ContainerScan
+    displayName: Container Scan (Trivy)
+    dependsOn: Build
+    jobs:
+      - job: trivy
+        steps:
+          - checkout: self
+          - script: docker build -t appseclab-backend:scan backend/AppSecLab.Api
+            displayName: Build backend image
+          - script: docker build -t appseclab-frontend:scan frontend
+            displayName: Build frontend image
+          - script: |
+              docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                aquasec/trivy image --format table --severity HIGH,CRITICAL \
+                --exit-code 0 appseclab-backend:scan
+            displayName: Scan backend image
+          - script: |
+              docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                aquasec/trivy image --format table --severity HIGH,CRITICAL \
+                --exit-code 0 appseclab-frontend:scan
+            displayName: Scan frontend image
+
+  # -------------------------------------------------------------------
+  # Deploy — staging then prod, main branch only, via SSH to the mini PC.
+  # deployment jobs target an Environment; add a required-approval check
+  # on the "production" Environment in Pipelines > Environments to
+  # reproduce GitHub's manual-reviewer gate.
+  # -------------------------------------------------------------------
+  - stage: DeployStaging
+    displayName: Deploy (staging)
+    dependsOn: [Secrets, SAST, Build, DependencyScan, ContainerScan, Test]
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: deploy_staging
+        environment: staging
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: DownloadSecureFile@1
+                  name: sshKey
+                  inputs:
+                    secureFile: mini-pc-deploy-key # upload in Library > Secure files
+                - script: |
+                    chmod 600 $(sshKey.secureFilePath)
+                    ssh -i $(sshKey.secureFilePath) -o StrictHostKeyChecking=no \
+                      $(SSH_USER)@$(SSH_HOST) "cd ~/appsec-homelab && git pull && docker compose up -d --build"
+                  displayName: Deploy to mini PC via SSH
+                - script: |
+                    chmod 600 $(sshKey.secureFilePath)
+                    ssh -i $(sshKey.secureFilePath) -o StrictHostKeyChecking=no \
+                      $(SSH_USER)@$(SSH_HOST) "mkdir -p ~/appsec-homelab/dast && \
+                      docker run --rm -v ~/appsec-homelab/dast:/zap/wrk/:rw \
+                      ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+                      -t http://$(SSH_HOST):8080 -r zap-baseline-report.html || true"
+                  displayName: "DAST — ZAP baseline via SSH"
+                - script: |
+                    chmod 600 $(sshKey.secureFilePath)
+                    scp -i $(sshKey.secureFilePath) -o StrictHostKeyChecking=no \
+                      $(SSH_USER)@$(SSH_HOST):~/appsec-homelab/dast/zap-baseline-report.html \
+                      $(Build.ArtifactStagingDirectory)/
+                  displayName: Pull ZAP report back from the mini PC
+                - publish: $(Build.ArtifactStagingDirectory)/zap-baseline-report.html
+                  artifact: zap-baseline-report
+                  condition: always()
+
+  - stage: DeployProd
+    displayName: Deploy (production)
+    dependsOn: DeployStaging
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: deploy_prod
+        environment: production # add a required-approval check here in Pipelines > Environments
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: echo "Wire up the real production deploy once a prod target exists."
+                  displayName: Deploy to production
