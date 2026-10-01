@@ -16,7 +16,7 @@ A lightweight risk assessment of the homelab environment, structured around NIST
 
 | Threat | Likelihood | Impact | Risk | Notes |
 |---|---|---|---|---|
-| Unauthorized SSH access to the mini PC | Low | High | Medium | Mitigated by key-only auth, ufw, fail2ban |
+| Unauthorized SSH access to the mini PC | Low | High | Medium | Key auth, with password auth left on as a fallback; ufw allows SSH from 192.168.88.0/24 over IPv4 only; fail2ban |
 | Accidental exposure of the vulnerable app beyond the local network | Medium | High | High | App is intentionally vulnerable; exposure to the internet would be a real incident, not a training exercise |
 | Secrets committed to the public GitHub repo | Low | High | Medium | Mitigated by gitleaks in CI, but relies on the scan actually catching it before merge |
 | Compromise of the mini PC via an unpatched OS/package vulnerability | Medium | Medium | Medium | No formal patch cadence currently in place |
@@ -30,8 +30,8 @@ A lightweight risk assessment of the homelab environment, structured around NIST
 - The README's "Seeded vulnerabilities" table documents every known, deliberately-seeded weakness in the app, with status and remediation evidence for each
 
 **Protect**
-- SSH key-only authentication on the mini PC, password auth disabled
-- ufw firewall, default-deny with explicit allow rules (OpenSSH, and the app's port scoped to the local subnet only, not the internet)
+- SSH key authentication on the mini PC. Password auth is still enabled as a fallback in case I lose the key, so SSH is limited to the local subnet instead
+- ufw firewall, default-deny, allowing only SSH and the app's port 8080, both from 192.168.88.0/24. Docker publishes container ports through NAT, which skips ufw's rules, so a `DOCKER-USER` rule in `/etc/ufw/after.rules` applies the same limit to container traffic (see gap 5)
 - fail2ban blocking repeated failed login attempts
 - Docker container isolation between the frontend, backend, and host
 - Security headers on the frontend (CSP, X-Frame-Options, X-Content-Type-Options, Cross-Origin isolation headers) reducing browser-side attack surface
@@ -55,6 +55,8 @@ A lightweight risk assessment of the homelab environment, structured around NIST
 2. **No Recover function in practice** — acceptable given the environment holds no production or sensitive data, but worth noting explicitly rather than silently omitting.
 3. **GitHub Actions supply-chain exposure — largely mitigated.** All Actions in the pipeline are already pinned to commit SHAs (not floating tags), with Dependabot's `github-actions` ecosystem keeping those pins current via reviewed PRs rather than silent drift. Residual risk is limited to a compromise landing in an Action's source before a pin is taken, which is a much narrower window than an unpinned tag.
 4. **No network segmentation** — the mini PC shares the flat home network with all other devices. Acceptable for a personal lab; would be flagged as a finding in a real environment with multiple untrusted or IoT devices present.
+5. **Docker bypassed ufw (fixed 1 October 2026).** ufw showed default-deny with only port 8080 allowed, but test containers I published on 8081 and 8082 answered from my Mac. Docker forwards published ports with DNAT, so that traffic goes through the FORWARD chain and never reaches ufw's INPUT rules. I added a `DOCKER-USER` rule in `/etc/ufw/after.rules` that lets 192.168.88.0/24 reach original port 8080 and drops other new connections arriving on the Wi-Fi interface. After `ufw reload`, 8080 still returned 200 from my Mac, a test container on 8081 timed out from my Mac while returning 200 on the mini PC itself, and containers could still reach the internet. The rule names the Wi-Fi interface (`wlxa047d7631c6e`), so it needs updating if the box moves to Ethernet.
+6. **IPv6 not yet checked at the router.** The mini PC has public IPv6 addresses. On 1 October 2026 I found ufw allowed SSH from anywhere over IPv6 and removed that rule, so SSH now only answers over IPv4 from the LAN. I haven't yet confirmed that my router blocks inbound IPv6 to the LAN.
 
 ## Why this document exists
 
