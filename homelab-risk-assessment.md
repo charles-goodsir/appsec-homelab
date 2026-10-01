@@ -21,7 +21,7 @@ A lightweight risk assessment of the homelab environment, structured around NIST
 | Secrets committed to the public GitHub repo | Low | High | Medium | Mitigated by gitleaks in CI, but relies on the scan actually catching it before merge |
 | Compromise of the mini PC via an unpatched OS/package vulnerability | Medium | Medium | Medium | No formal patch cadence currently in place |
 | Weak Wi-Fi security exposing the mini PC to the local network | Low | Medium | Low | Standard home Wi-Fi (WPA2/3), no additional segmentation |
-| CI/CD pipeline compromise (e.g. malicious dependency, poisoned Action) | Low | Low | Low | Actions are SHA-pinned rather than tag-pinned, closing the main tag-hijack vector; Dependabot keeps the pins updated via reviewed PRs |
+| CI/CD pipeline compromise (e.g. malicious dependency, poisoned Action or tool image) | Low | Low | Low | CI runs in Azure Pipelines and pulls its scanner images by floating tag (gitleaks:latest, semgrep/semgrep, aquasec/trivy, zaproxy:stable), so a hijacked tag would run in my pipeline. See gap 3 |
 
 ## Existing Controls, Mapped to NIST CSF 2.0
 
@@ -53,7 +53,7 @@ A lightweight risk assessment of the homelab environment, structured around NIST
 
 1. **No formal patch management** — the mini PC has no scheduled `apt update && apt upgrade` cadence. Recommendation: a weekly manual check, or a cron job with notification rather than silent auto-upgrade (to avoid breaking the environment unexpectedly).
 2. **No Recover function in practice** — acceptable given the environment holds no production or sensitive data, but worth noting explicitly rather than silently omitting.
-3. **GitHub Actions supply-chain exposure — largely mitigated.** All Actions in the pipeline are already pinned to commit SHAs (not floating tags), with Dependabot's `github-actions` ecosystem keeping those pins current via reviewed PRs rather than silent drift. Residual risk is limited to a compromise landing in an Action's source before a pin is taken, which is a much narrower window than an unpinned tag.
+3. **CI supply-chain exposure: not mitigated.** This document used to say every GitHub Action was pinned to a commit SHA and kept current by Dependabot. When I checked each pin against the GitHub API on 2026-10-02, that was wrong in three ways. Two pins (trivy-action and codeql-action/upload-sarif) were annotated tag object SHAs, not commit SHAs, because I copied the SHA of the tag ref instead of the commit it points to. The runner resolved them anyway, so no run failed and nothing flagged it. Dependabot did open bump PRs for five Actions, but I closed all of them unmerged on 2026-09-19, so eight of nine pins were behind their latest release. I have removed the GitHub Actions workflow because CI now runs in Azure Pipelines, and that pipeline pulls its scanner images by floating tag. Recommendation: pin each image by digest (`image@sha256:...`) and bump the digests on a schedule through reviewed PRs. Dependabot can't read image references inside pipeline scripts, so this needs a regex-based tool such as Renovate or a monthly manual check.
 4. **No network segmentation** — the mini PC shares the flat home network with all other devices. Acceptable for a personal lab; would be flagged as a finding in a real environment with multiple untrusted or IoT devices present.
 
 ## Why this document exists
