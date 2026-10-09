@@ -29,7 +29,7 @@ cd appsec-homelab
 docker compose up -d --build
 ```
 
-- `frontend` (nginx) publishes host port **8080**
+- `frontend` (nginx) publishes host port **8080** on 127.0.0.1 only
 - `backend` (.NET) is only reachable inside the compose network as `backend`
 - SQLite DB is created and seeded inside the backend container on startup
 
@@ -41,25 +41,32 @@ curl -s localhost:8080 | head
 curl -s "localhost:8080/api/products/search?query=a"
 ```
 
-## 4. Open the port on the LAN
+## 4. Reach it from the Mac (SSH tunnel)
+
+The app is deliberately vulnerable, so port 8080 is bound to loopback and is
+not exposed on the LAN. Docker-published ports bypass `ufw allow` rules, so
+binding to 127.0.0.1 is the control, not the firewall. Tunnel in instead:
 
 ```bash
-sudo ufw allow from 192.168.88.0/24 to any port 8080 proto tcp
-sudo ufw status
+ssh -N -L 8080:localhost:8080 owner@192.168.88.18
 ```
-
-(Scope it to the LAN subnet rather than a blanket `allow 8080`.)
 
 ## 5. Verify from the Mac
 
-Browser: `http://192.168.88.18:8080`
+With the tunnel open, browse to `http://localhost:8080`
 
 - SQLi login bypass: username `administrator'--`, any password
 - Reflected XSS: search `<img src=x onerror=alert(1)>`
 
+Check the port is closed on the LAN (expect a failure):
+
+```bash
+nc -z -G 3 192.168.88.18 8080
+```
+
 ## 6. Point ZAP at it
 
-Target: `http://192.168.88.18:8080`
+Target: `http://localhost:8080` (through the tunnel)
 
 ## Managing the deployment
 
