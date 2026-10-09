@@ -19,8 +19,10 @@ services:
     build:
       context: ./frontend
     container_name: appseclab-frontend
+    # Loopback only: this app is deliberately vulnerable, so keep it off the
+    # LAN. Reach it from another machine with an SSH tunnel (see DEPLOY.md).
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
       - backend
     restart: unless-stopped
